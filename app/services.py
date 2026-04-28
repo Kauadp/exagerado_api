@@ -1,9 +1,9 @@
 import httpx
 import logging
 from dotenv import set_key
-from .config import settings
-from .database import SessionLocal
-from .models import VendaItem
+from config import settings
+from database import SessionLocal
+from models import VendaItem
 import logging
 from sqlalchemy.dialects.postgresql import insert
 logger = logging.getLogger(__name__)
