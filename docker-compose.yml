@@ -21,7 +21,9 @@ services:
     container_name: exagerado_worker
     restart: always
     env_file: .env
-    command: python main_stats.py  # <-- Aqui roda o seu loop de 30 min
+    command: python app/main_stats.py  # <-- Aqui roda o seu loop de 30 min
+    enviroment:
+      - PYTHONPATH=/app
     depends_on:
       - evolution-postgres
       - redis
