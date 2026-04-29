@@ -168,69 +168,234 @@ async def enviar_imagem_whatsapp(numero: str, caption: str, file_content: bytes,
         logger.error(f"❌ Erro ao enviar Imagem Zap: {e}")
         return {"status": "error", "message": str(e)}
 
+def gerar_html_secao_loja(df_loja, nome_loja):
+
+    # =========================
+    # SEGURANÇA (EVITA CRASH)
+    # =========================
+    if df_loja is None or df_loja.empty:
+        return """
+        <html>
+        <body style="font-family:sans-serif;padding:20px;">
+            <h3>Sem dados disponíveis para essa loja</h3>
+        </body>
+        </html>
+        """
+
+    # =========================
+    # KPI BASE
+    # =========================
+    faturamento = df_loja['valor_total'].sum()
+    vendas = df_loja['venda_id'].nunique()
+    ticket = faturamento / vendas if vendas > 0 else 0
+
+    # =========================
+    # PROJEÇÃO
+    # =========================
+    dias = df_loja["data"].nunique()
+    dias_totais = 6
+    projecao = (faturamento / dias) * dias_totais if dias > 0 else 0
+
+    percentual = (faturamento / projecao * 100) if projecao > 0 else 0
+
+    # =========================
+    # HORAS (INSIGHT OPERACIONAL)
+    # =========================
+    faturamento_hora = (
+        df_loja.groupby('hora')['valor_total']
+        .sum()
+        .reset_index()
+        .sort_values("hora")
+    )
+
+    if not faturamento_hora.empty:
+        melhor_hora = faturamento_hora.loc[faturamento_hora['valor_total'].idxmax(), 'hora']
+        pior_hora = faturamento_hora.loc[faturamento_hora['valor_total'].idxmin(), 'hora']
+
+        ultima_hora = faturamento_hora.iloc[-1]['hora']
+        valor_ultima_hora = faturamento_hora.iloc[-1]['valor_total']
+        media_hora = faturamento_hora['valor_total'].mean()
+
+        pico = faturamento_hora['valor_total'].max()
+        vale = faturamento_hora['valor_total'].min()
+
+        status_hora = "🔥 Acima da média" if valor_ultima_hora >= media_hora else "⚠️ Abaixo da média"
+    else:
+        melhor_hora = pior_hora = ultima_hora = "-"
+        valor_ultima_hora = 0
+        pico = vale = 0
+        status_hora = "Sem dados"
+
+    # =========================
+    # GRÁFICO (DIÁRIO)
+    # =========================
+    faturamento_dia = (
+        df_loja.groupby('data')['valor_total']
+        .sum()
+        .reset_index()
+        .sort_values("data")
+    )
+
+    faturamento_dia["data"] = pd.to_datetime(faturamento_dia["data"])
+    faturamento_dia["data_str"] = faturamento_dia["data"].dt.strftime("%d/%m")
+
+    fig = px.line(
+        faturamento_dia,
+        x='data_str',
+        y='valor_total',
+        markers=True
+    )
+
+    fig.update_traces(line=dict(color="#6B3FA0", width=3))
+
+    grafico_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+    # =========================
+    # TOP PRODUTOS
+    # =========================
+
+    # 💰 FATURAMENTO
+    top_fat = (
+        df_loja.groupby('nome_produto')['valor_total']
+        .sum()
+        .sort_values(ascending=False)
+        .head(3)
+        .reset_index()
+    )
+
+    lista_fat = "".join([
+        f"<li><b>{row['nome_produto']}</b> — R$ {row['valor_total']:,.2f}</li>"
+        for _, row in top_fat.iterrows()
+    ])
+
+    # 📦 QUANTIDADE
+    top_qtd = (
+        df_loja.groupby('nome_produto')['quantidade']
+        .sum()
+        .sort_values(ascending=False)
+        .head(3)
+        .reset_index()
+    )
+
+    lista_qtd = "".join([
+        f"<li><b>{row['nome_produto']}</b> — {int(row['quantidade'])} un</li>"
+        for _, row in top_qtd.iterrows()
+    ])
+
+    # 🔥 ATUAL (RECENTE)
+    ultimas_horas = faturamento_hora.tail(2)['hora'].tolist() if not faturamento_hora.empty else []
+
+    df_recente = df_loja[df_loja['hora'].isin(ultimas_horas)]
+
+    top_recente = (
+        df_recente.groupby('nome_produto')['valor_total']
+        .sum()
+        .sort_values(ascending=False)
+        .head(3)
+        .reset_index()
+    )
+
+    if top_recente.empty:
+        lista_recente = "<li>Sem vendas recentes</li>"
+    else:
+        lista_recente = "".join([
+            f"<li><b>{row['nome_produto']}</b> — R$ {row['valor_total']:,.2f}</li>"
+            for _, row in top_recente.iterrows()
+        ])
+
+    # =========================
+    # STATUS COR
+    # =========================
+    cor_status = "#10B981" if percentual >= 100 else "#F59E0B" if percentual >= 80 else "#EF4444"
+
+    # =========================
+    # HTML FINAL
+    # =========================
+    html = f"""
+    <html>
+    <body style="font-family:sans-serif;background:#F6F4EE;padding:20px;">
+
+        <div style="max-width:520px;margin:auto;">
+
+            <!-- HEADER -->
+            <div style="background:#6B3FA0;color:white;padding:16px;border-radius:12px;">
+                <h2 style="margin:0;">🏪 {nome_loja}</h2>
+                <p style="margin:4px 0 0 0;font-size:12px;">
+                    Atualizado às {pd.Timestamp.now().strftime('%H:%M')}
+                </p>
+            </div>
+
+            <!-- KPI -->
+            <div style="background:white;padding:16px;border-radius:12px;margin-top:12px;">
+
+                <p><b>💰 Faturamento:</b> R$ {faturamento:,.2f}</p>
+                <p><b>🧾 Vendas:</b> {vendas}</p>
+                <p><b>🎯 Ticket:</b> R$ {ticket:,.2f}</p>
+
+                <hr>
+
+                <p style="color:{cor_status};font-weight:bold;">
+                    📊 {percentual:.0f}% da projeção (R$ {projecao:,.2f})
+                </p>
+
+            </div>
+
+            <!-- MOMENTO -->
+            <div style="background:white;padding:16px;border-radius:12px;margin-top:12px;">
+
+                <b>⏱ Agora</b>
+
+                <p>Última hora: {ultima_hora}h (R$ {valor_ultima_hora:,.2f})</p>
+                <p>{status_hora}</p>
+
+            </div>
+
+            <!-- INSIGHTS -->
+            <div style="background:white;padding:16px;border-radius:12px;margin-top:12px;">
+
+                <b>📌 Insights</b>
+
+                <p>🔥 Melhor hora: {melhor_hora}h (R$ {pico:,.2f})</p>
+                <p>⚠️ Pior hora: {pior_hora}h (R$ {vale:,.2f})</p>
+
+            </div>
+
+            <!-- GRÁFICO -->
+            <div style="background:white;padding:16px;border-radius:12px;margin-top:12px;">
+                {grafico_html}
+            </div>
+
+            <!-- PRODUTOS -->
+            <div style="background:white;padding:16px;border-radius:12px;margin-top:12px;">
+
+                <b>🔥 Vendendo Agora</b>
+                <ul>{lista_recente}</ul>
+
+                <hr>
+
+                <b>🏆 Top Faturamento</b>
+                <ul>{lista_fat}</ul>
+
+                <hr>
+
+                <b>📦 Mais Vendidos</b>
+                <ul>{lista_qtd}</ul>
+
+            </div>
+
+        </div>
+
+    </body>
+    </html>
+    """
+
+    return html
+
 def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
     """
     Gera o HTML e converte para PNG usando a lógica do Dashboard.
     """
-    # === CÁLCULOS (IGUAL AO DASHBOARD) ===
-    faturamento = df_loja['valor_total'].sum()
-    vendas = df_loja['venda_id'].nunique()
-    ticket = faturamento / vendas if vendas > 0 else 0
-    
-    # Projeção (ajuste conforme sua lógica de dias)
-    dias_observados = df_loja["data"].nunique()
-    projecao = (faturamento / dias_observados) * 6 if dias_observados > 0 else 0
-
-    # === HTML + CSS (ESTILO EXAGERADO) ===
-    html_content = f"""
-    <html>
-    <head>
-        <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0e1117; color: white; padding: 30px; }}
-            .header {{ border-bottom: 2px solid #6B3FA0; padding-bottom: 10px; margin-bottom: 20px; }}
-            .kpi-container {{ display: flex; justify-content: space-between; gap: 20px; margin-bottom: 30px; }}
-            .kpi-card {{ background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; flex: 1; text-align: center; }}
-            .kpi-value {{ font-size: 24px; font-weight: bold; color: #6B3FA0; }}
-            .kpi-label {{ font-size: 14px; color: #8b949e; margin-top: 5px; }}
-            .footer {{ margin-top: 30px; font-size: 12px; color: #484f58; text-align: center; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>🏪 {nome_loja} - Relatório de Performance</h1>
-        </div>
-        
-        <div class="kpi-container">
-            <div class="kpi-card">
-                <div class="kpi-value">R$ {faturamento:,.2f}</div>
-                <div class="kpi-label">Faturamento Total</div>
-                <div style="font-size: 11px; color: #3fb950;">Projeção: R$ {projecao:,.2f}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-value">{vendas}</div>
-                <div class="kpi-label">Vendas Realizadas</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-value">R$ {ticket:,.2f}</div>
-                <div class="kpi-label">Ticket Médio</div>
-            </div>
-        </div>
-
-        <h3 style="color: #F59E0B;">📦 Top Produtos (Qtd)</h3>
-        <table style="width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden;">
-            <tr style="background: #30363d; text-align: left;">
-                <th style="padding: 10px;">Produto</th>
-                <th style="padding: 10px;">Qtd</th>
-                <th style="padding: 10px;">Total</th>
-            </tr>
-            {"".join([f"<tr style='border-bottom: 1px solid #30363d;'><td style='padding: 10px;'>{row['nome_produto']}</td><td style='padding: 10px;'>{row['quantidade']}</td><td style='padding: 10px;'>R$ {row['valor_total']:,.2f}</td></tr>" 
-                      for _, row in df_loja.groupby('nome_produto').agg({'quantidade':'sum', 'valor_total':'sum'}).sort_values('quantidade', ascending=False).head(5).iterrows()])}
-        </table>
-
-        <div class="footer">Gerado automaticamente pelo Sistema Exagerado Insights</div>
-    </body>
-    </html>
-    """
+    html_content = gerar_html_secao_loja(df_loja, nome_loja)
 
     # === CONVERSÃO PARA PNG (PLAYWRIGHT) ===
     nome_arquivo = f"relatorio_{nome_loja.lower().replace(' ', '_')}.png"
