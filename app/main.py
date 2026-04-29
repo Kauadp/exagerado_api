@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, UploadFile, File, Form
 from config import settings
 from database import engine, Base
-from services import processar_venda_completa
+from services import processar_venda_completa, enviar_imagem_whatsapp
 import logging
 from datetime import datetime
 
@@ -16,6 +16,11 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Mapeamento de IDs da Loja no Bling para Números de WhatsApp
+MAP_LOJAS_WPP = {
+    205906072: "5527999609988",  # Ex: Gerente Loja 1
+}
 
 # Cria as tabelas na inicialização
 Base.metadata.create_all(bind=engine)
@@ -38,6 +43,7 @@ async def bling_webhook(request: Request, token: str, background_tasks: Backgrou
 
 @app.post("/alerts/send-print")
 async def receive_print_signal(
+    background_tasks: BackgroundTasks,
     token: str,
     loja_id: int = Form(...), 
     file: UploadFile = File(...)
@@ -57,20 +63,19 @@ async def receive_print_signal(
 
     try:
         content = await file.read()
-        file_size_kb = len(content) / 1024
-        
+        numero_destino = MAP_LOJAS_WPP.get(loja_id)
         logger.info(f"\n📸 [SINAL RECEBIDO] - {agora}")
-        logger.info(f"   |-- Loja ID: {loja_id}")
-        logger.info(f"   |-- Arquivo: {file.filename}")
-        logger.info(f"   |-- Tamanho: {file_size_kb:.2f} KB")
-        logger.info(f"   |-- Status: Aguardando integração com API de WhatsApp...\n")
+        legenda = f"📸 *Dashboard Capturado* - Loja {loja_id}\nEm: {datetime.now().strftime('%H:%M:%S')}"
+        
+        background_tasks.add_task(
+            enviar_imagem_whatsapp, 
+            numero_destino, 
+            legenda, 
+            content, 
+            file.filename
+        )
 
-        return {
-            "status": "received", 
-            "loja_id": loja_id, 
-            "timestamp": agora,
-            "message": "Sinal de print capturado com sucesso no backend!"
-        }
+        return {"status": "sent_to_queue", "target": numero_destino}
 
     except Exception as e:
         logger.error(f"💥 Erro ao processar sinal de print: {str(e)}")

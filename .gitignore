@@ -1,3 +1,17 @@
-venv/
+# Segredos
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
 app.log
+test_zap.py
+
+# Docker/Logs
+*.log
+postgres_data/
+evolution_instances/

@@ -1,12 +1,22 @@
 import httpx
 import logging
-from dotenv import set_key
+import os
+from dotenv import load_dotenv, set_key
+from sqlalchemy.dialects.postgresql import insert
+
 from config import settings
 from database import SessionLocal
 from models import VendaItem
-import logging
-from sqlalchemy.dialects.postgresql import insert
+
+# Configura o logger
 logger = logging.getLogger(__name__)
+load_dotenv()
+
+# --- CONFIGURAÇÕES WHATSAPP ---
+WPP_URL_COMPLETA = os.getenv('WPP_API_URL')
+WPP_TOKEN = os.getenv("AUTHENTICATION_API_KEY")
+
+# --- FUNÇÕES BLING ---
 
 async def get_new_token():
     url = "https://www.bling.com.br/Api/v3/oauth/token"
@@ -36,6 +46,8 @@ async def fetch_estoque_atual(id_produto: int):
             return data[0].get("saldoFisicoTotal", 0) if data else 0
         return 0
 
+# --- FUNÇÃO PRINCIPAL DE PROCESSAMENTO ---
+
 async def processar_venda_completa(id_nota: int):
     logger.debug(f"🔍 Iniciando processamento da nota: {id_nota}")
     url = f"https://www.bling.com.br/Api/v3/nfce/{id_nota}"
@@ -43,7 +55,6 @@ async def processar_venda_completa(id_nota: int):
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
-        logger.debug(f"📡 Resposta Bling: {response.status_code} - {response.text[:200]}")
         
         if response.status_code == 401:
             token = await get_new_token()
@@ -55,6 +66,7 @@ async def processar_venda_completa(id_nota: int):
             venda = response.json().get("data", {})
             itens = venda.get("itens", [])
             logger.info(f"📦 Nota {id_nota} contém {len(itens)} itens.")
+            
             db = SessionLocal()
             try:
                 for item in itens:
@@ -64,13 +76,9 @@ async def processar_venda_completa(id_nota: int):
                     valor = item.get("valor")
                     qtd = item.get("quantidade")
                     
-                    logger.debug(f"🔎 Processando item: {sku} - {descricao}")
-                    
                     estoque_restante = 0
                     if id_prod and sku != "AVULSO":
                         estoque_restante = await fetch_estoque_atual(id_prod)
-                    else:
-                        logger.warning(f"⚠️ Item {sku} ignorado na busca de estoque (Avulso ou sem ID).")
 
                     dados_venda = {
                         "venda_id": id_nota,
@@ -86,7 +94,6 @@ async def processar_venda_completa(id_nota: int):
                     }
 
                     stmt = insert(VendaItem).values(dados_venda)
-                    
                     stmt = stmt.on_conflict_do_update(
                         constraint="unique_venda_item",
                         set_=dados_venda
@@ -94,9 +101,65 @@ async def processar_venda_completa(id_nota: int):
                     db.execute(stmt)
                 
                 db.commit()
-                logger.info(f"✅ Nota {id_nota} processada e sincronizada (Upsert)!")
+                logger.info(f"✅ Nota {id_nota} processada!")
+                
             except Exception as e:
                 db.rollback()
                 logger.error(f"❌ Erro no banco: {e}")
             finally:
                 db.close()
+
+# --- FUNÇÃO WHATSAPP ---
+
+async def enviar_mensagem_whatsapp(numero: str, texto: str):
+    """
+    Envia uma mensagem de texto usando a URL completa definida no .env
+    """
+    headers = {
+        "apikey": WPP_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "number": numero,
+        "text": texto,
+        "delay": 1200,
+        "linkPreview": True
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(WPP_URL_COMPLETA, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        logger.error(f"❌ Erro ao enviar WhatsApp: {e}")
+        return {"status": "error", "message": str(e)}
+    
+    
+async def enviar_imagem_whatsapp(numero: str, caption: str, file_content: bytes, file_name: str):
+    """
+    Envia uma imagem (PNG/JPG) via Evolution API.
+    """
+    url_media = WPP_URL_COMPLETA.replace("sendText", "sendMedia")
+    
+    headers = {"apikey": WPP_TOKEN}
+    
+    files = {
+        "file": (file_name, file_content, "image/png")
+    }
+    
+    payload = {
+        "number": numero,
+        "mediatype": "image",
+        "caption": caption
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url_media, data=payload, files=files, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        logger.error(f"❌ Erro ao enviar Imagem Zap: {e}")
+        return {"status": "error", "message": str(e)}
