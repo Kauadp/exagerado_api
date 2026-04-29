@@ -22,7 +22,7 @@ services:
     restart: always
     env_file: .env
     command: python app/main_stats.py  # <-- Aqui roda o seu loop de 30 min
-    enviroment:
+    environment:
       - PYTHONPATH=/app
     depends_on:
       - evolution-postgres
