@@ -5,6 +5,13 @@ from database import engine, Base
 from services import processar_venda_completa, enviar_imagem_whatsapp
 import logging
 from datetime import datetime
+from main_stats import rodar_pipeline_completo
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+WEBHOOK_TOKEN=os.getenv("WEBHOOK_TOKEN")
 
 # Configuração centralizada
 logging.basicConfig(
@@ -85,6 +92,19 @@ async def receive_print_signal(
         logger.error(f"💥 Erro ao processar sinal de print: {str(e)}")
         raise HTTPException(status_code=500, detail="Erro interno ao receber o print")
 
+
+@app.post("/trigger-pipeline")
+async def trigger_full_pipeline(loja_id: int, token: str):
+    if token != WEBHOOK_TOKEN:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    try:
+        resultado = rodar_pipeline_completo(enviar_print=True)
+        
+        return {"status": "success", "message": f"Pipeline da loja {loja_id} executado com sucesso!"}
+    
+    except Exception as e:
+        logger.error(f"Erro ao rodar pipeline manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
