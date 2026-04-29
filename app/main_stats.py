@@ -1,45 +1,53 @@
 import time
 import pandas as pd
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
+import os
+from dotenv import load_dotenv
+
+# Importações internas
 from app.database import engine
 from app.statistics import AlertaPerformance, AlertaRanking, AlertaLogistica, AlertaBayes
-from services import enviar_mensagem_whatsapp
+from services import enviar_mensagem_whatsapp, gerar_relatorio_loja_automatizado, enviar_imagem_whatsapp
 
+# Configurações
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-LOJAS_ATIVAS = [205906072, 205906073] # MUDAR AQUI
-
-# Mapeamento de IDs da Loja no Bling para Números de WhatsApp
+LOJAS_ATIVAS = [205906072] 
 MAP_LOJAS_WPP = {
-    205906072: "5527999609988",  # Ex: Gerente Loja 1
+    205906072: os.getenv("WPP_NUMBER_TEST"),
 }
 
-def rodar_pipeline_texto():
-    logger.info(f"🕒 Iniciando rodada de insights: {datetime.now().strftime('%H:%M')}")
+def rodar_pipeline_completo(enviar_print=False):
+    agora = datetime.now()
+    logger.info(f"🕒 Executando Pipeline - {'TEXTO + PRINT' if enviar_print else 'APENAS TEXTO'}")
     
     try:
-        query = "SELECT * FROM vendas_itens WHERE timestamp > now() - interval '48 hours'"
+        # Puxamos os últimos 7 dias para ter base comparativa e projeção
+        query = "SELECT * FROM vendas_itens WHERE timestamp > now() - interval '7 days'"
         df_geral = pd.read_sql(query, engine)
         df_geral['timestamp'] = pd.to_datetime(df_geral['timestamp'])
+        df_geral['data'] = df_geral['timestamp'].dt.date
+        df_geral['hora'] = df_geral['timestamp'].dt.hour
     except Exception as e:
-        logger.error(f"❌ Falha ao acessar banco de dados: {e}")
+        logger.error(f"❌ Erro ao acessar banco: {e}")
         return
 
     if df_geral.empty:
-        logger.warning("⚠️ Banco vazio. Sem vendas para analisar.")
+        logger.warning("⚠️ Sem dados para análise.")
         return
 
     for loja_id in LOJAS_ATIVAS:
         df_loja = df_geral[df_geral['id_loja'] == loja_id]
         numero_destino = MAP_LOJAS_WPP.get(loja_id)
         
-        if df_loja.empty:
+        if df_loja.empty or not numero_destino:
             continue
 
-        # Lista de Processadores de Inteligência
+        # --- 1. INSIGHTS DE TEXTO (Sempre que o pipeline rodar) ---
         processadores = [
             AlertaPerformance(df_loja, loja_id),
             AlertaRanking(df_loja, loja_id),
@@ -47,35 +55,64 @@ def rodar_pipeline_texto():
             AlertaBayes(df_loja, loja_id)
         ]
 
-        relatorio_loja = []
-        
+        relatorio_texto = []
         for p in processadores:
             try:
                 p.analisar()
                 texto = p.gerar_texto()
-                if texto:
-                    relatorio_loja.append(texto)
+                if texto: relatorio_texto.append(texto)
             except Exception as e:
-                logger.error(f"❌ Erro no {p.__class__.__name__} da loja {loja_id}: {e}")
+                logger.error(f"❌ Erro no {p.__class__.__name__}: {e}")
 
-        if relatorio_loja:
-            cabecalho = f"📊 *INSIGHTS EXAGERADO* (Loja {loja_id})\n{datetime.now().strftime('%d/%m - %H:%M')}\n"
-            mensagem_final = cabecalho + "\n\n---\n\n".join(relatorio_loja)
-            logger.info(f"📱 Enviando para {numero_destino} (Loja {loja_id})")
+        if relatorio_texto:
+            cabecalho = f"📊 *INSIGHTS EXAGERADO*\n🕒 {agora.strftime('%H:%M')}\n"
+            mensagem_final = cabecalho + "\n\n---\n\n".join(relatorio_texto)
             asyncio.run(enviar_mensagem_whatsapp(numero_destino, mensagem_final))
 
+        # --- 2. RELATÓRIO VISUAL (Apenas se enviar_print for True) ---
+        if enviar_print:
+            logger.info(f"📸 Gerando print para Loja {loja_id}...")
+            try:
+                caminho_img = gerar_relatorio_loja_automatizado(df_loja, f"Loja {loja_id}")
+                with open(caminho_img, "rb") as f:
+                    img_data = f.read()
+                    asyncio.run(enviar_imagem_whatsapp(
+                        numero_destino, 
+                        f"🖼️ *RELATÓRIO HORA EM HORA* - {agora.hour}h", 
+                        img_data, 
+                        caminho_img
+                    ))
+                if os.path.exists(caminho_img):
+                    os.remove(caminho_img)
+            except Exception as e:
+                logger.error(f"❌ Erro no print: {e}")
+
 if __name__ == "__main__":
+    logger.info("🚀 Sistema Exagerado Insights Iniciado!")
+    
     while True:
         agora = datetime.now()
-        
-        # Só roda entre 10h e 22h
-        if 10 <= agora.hour <= 22:
-            rodar_pipeline_texto()
+        hora = agora.hour
+        minuto = agora.minute
+
+        # Regra: Evento das 10h às 22h
+        if 10 <= hora <= 22:
+            # Disparo de hora em hora (ex: 11:00, 12:00...) -> TEXTO + PRINT
+            if minuto == 0 and hora >= 11:
+                rodar_pipeline_completo(enviar_print=True)
+                logger.info("✅ Rodada de hora cheia concluída. Dormindo...")
+                time.sleep(60) # Evita disparar duas vezes no mesmo minuto
+
+            # Disparo de 30 em 30 min (ex: 10:30, 11:30...) -> APENAS TEXTO
+            elif minuto == 30:
+                rodar_pipeline_completo(enviar_print=False)
+                logger.info("✅ Rodada de meia hora concluída. Dormindo...")
+                time.sleep(60)
+
+            # Pequena espera para não fritar o processador checando o relógio
+            time.sleep(30)
             
-            # Espera 30 minutos
-            logger.info("💤 Sleeping for 30 min...")
-            time.sleep(1800)
         else:
-            # Fora do horário, checa a cada 15 min se já deu 10h
-            logger.info("🌙 Fora do horário de operação. Aguardando...")
-            time.sleep(900)
+            # Fora do horário, espera 10 min e checa de novo
+            logger.info(f"🌙 {agora.strftime('%H:%M')} - Fora do horário do evento. Aguardando...")
+            time.sleep(600)

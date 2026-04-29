@@ -1,15 +1,27 @@
 version: "3.8"
 
 services:
-  # === SUA APLICAÇÃO (BACKEND) ===
+  # === API DE RECEBIMENTO (WEBHOOKS) ===
   exagerado-app:
-    build: . # Ele vai procurar um arquivo chamado 'Dockerfile' na raiz
+    build: .
     container_name: exagerado_backend
     restart: always
-    env_file:
-      - .env
+    env_file: - .env
     ports:
       - "8000:8000"
+    depends_on:
+      - evolution-postgres
+      - redis
+    networks:
+      - evolution-net
+
+  # === WORKER DE INTELIGÊNCIA (TEMPORIZADOR/ESTATÍSTICAS) ===
+  exagerado-worker:
+    build: .
+    container_name: exagerado_worker
+    restart: always
+    env_file: - .env
+    command: python main_stats.py  # <-- Aqui roda o seu loop de 30 min
     depends_on:
       - evolution-postgres
       - redis
@@ -30,8 +42,7 @@ services:
       - evolution_instances:/evolution/instances
     networks:
       - evolution-net
-    env_file:
-      - .env # Certifique-se de que as chaves da Evolution estão no .env
+    env_file: - .env
     expose:
       - "8080"
 
@@ -55,16 +66,13 @@ services:
       - evolution_redis:/data
     networks:
       - evolution-net
-    expose:
-      - "6379"
 
   # === POSTGRES ===
   evolution-postgres:
     container_name: evolution_postgres
-    image: postgres:15
+    image: postgres:15-alpine # Alpine para economizar RAM
     restart: always
-    env_file:
-      - .env
+    env_file: - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE}
       POSTGRES_USER: ${POSTGRES_USERNAME}
@@ -73,8 +81,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - evolution-net
-    expose:
-      - "5432"
 
 volumes:
   evolution_instances:

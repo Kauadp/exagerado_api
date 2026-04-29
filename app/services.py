@@ -7,6 +7,10 @@ from sqlalchemy.dialects.postgresql import insert
 from config import settings
 from database import SessionLocal
 from models import VendaItem
+import pandas as pd
+import plotly.express as px
+from playwright.sync_api import sync_playwright
+import base64
 
 # Configura o logger
 logger = logging.getLogger(__name__)
@@ -163,3 +167,79 @@ async def enviar_imagem_whatsapp(numero: str, caption: str, file_content: bytes,
     except Exception as e:
         logger.error(f"❌ Erro ao enviar Imagem Zap: {e}")
         return {"status": "error", "message": str(e)}
+
+def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
+    """
+    Gera o HTML e converte para PNG usando a lógica do Dashboard.
+    """
+    # === CÁLCULOS (IGUAL AO DASHBOARD) ===
+    faturamento = df_loja['valor_total'].sum()
+    vendas = df_loja['venda_id'].nunique()
+    ticket = faturamento / vendas if vendas > 0 else 0
+    
+    # Projeção (ajuste conforme sua lógica de dias)
+    dias_observados = df_loja["data"].nunique()
+    projecao = (faturamento / dias_observados) * 6 if dias_observados > 0 else 0
+
+    # === HTML + CSS (ESTILO EXAGERADO) ===
+    html_content = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0e1117; color: white; padding: 30px; }}
+            .header {{ border-bottom: 2px solid #6B3FA0; padding-bottom: 10px; margin-bottom: 20px; }}
+            .kpi-container {{ display: flex; justify-content: space-between; gap: 20px; margin-bottom: 30px; }}
+            .kpi-card {{ background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; flex: 1; text-align: center; }}
+            .kpi-value {{ font-size: 24px; font-weight: bold; color: #6B3FA0; }}
+            .kpi-label {{ font-size: 14px; color: #8b949e; margin-top: 5px; }}
+            .footer {{ margin-top: 30px; font-size: 12px; color: #484f58; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🏪 {nome_loja} - Relatório de Performance</h1>
+        </div>
+        
+        <div class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-value">R$ {faturamento:,.2f}</div>
+                <div class="kpi-label">Faturamento Total</div>
+                <div style="font-size: 11px; color: #3fb950;">Projeção: R$ {projecao:,.2f}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value">{vendas}</div>
+                <div class="kpi-label">Vendas Realizadas</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value">R$ {ticket:,.2f}</div>
+                <div class="kpi-label">Ticket Médio</div>
+            </div>
+        </div>
+
+        <h3 style="color: #F59E0B;">📦 Top Produtos (Qtd)</h3>
+        <table style="width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden;">
+            <tr style="background: #30363d; text-align: left;">
+                <th style="padding: 10px;">Produto</th>
+                <th style="padding: 10px;">Qtd</th>
+                <th style="padding: 10px;">Total</th>
+            </tr>
+            {"".join([f"<tr style='border-bottom: 1px solid #30363d;'><td style='padding: 10px;'>{row['nome_produto']}</td><td style='padding: 10px;'>{row['quantidade']}</td><td style='padding: 10px;'>R$ {row['valor_total']:,.2f}</td></tr>" 
+                      for _, row in df_loja.groupby('nome_produto').agg({'quantidade':'sum', 'valor_total':'sum'}).sort_values('quantidade', ascending=False).head(5).iterrows()])}
+        </table>
+
+        <div class="footer">Gerado automaticamente pelo Sistema Exagerado Insights</div>
+    </body>
+    </html>
+    """
+
+    # === CONVERSÃO PARA PNG (PLAYWRIGHT) ===
+    nome_arquivo = f"relatorio_{nome_loja.lower().replace(' ', '_')}.png"
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        page = browser.new_page(viewport={"width": 800, "height": 1000})
+        page.set_content(html_content, wait_until="networkidle")
+        page.screenshot(path=nome_arquivo, full_page=True)
+        browser.close()
+
+    return nome_arquivo

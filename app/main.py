@@ -17,9 +17,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
 # Mapeamento de IDs da Loja no Bling para Números de WhatsApp
 MAP_LOJAS_WPP = {
-    205906072: "5527999609988",  # Ex: Gerente Loja 1
+    205906072: os.getenv("WPP_NUMBER_TEST")  # Ex: Gerente Loja 1
 }
 
 # Cria as tabelas na inicialização
