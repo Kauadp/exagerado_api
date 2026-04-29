@@ -6,7 +6,7 @@ services:
     build: .
     container_name: exagerado_backend
     restart: always
-    env_file: - .env
+    env_file: .env
     ports:
       - "8000:8000"
     depends_on:
@@ -20,7 +20,7 @@ services:
     build: .
     container_name: exagerado_worker
     restart: always
-    env_file: - .env
+    env_file: .env
     command: python main_stats.py  # <-- Aqui roda o seu loop de 30 min
     depends_on:
       - evolution-postgres

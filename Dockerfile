@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -35,4 +35,4 @@ RUN playwright install chromium --with-deps
 COPY . .
 
 # O CMD padrão será a API, mas vamos rodar o main_stats como outro serviço
-CMD ["python", "app/receive_print.py"]
+CMD ["python", "app/main.py"]
