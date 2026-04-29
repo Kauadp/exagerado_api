@@ -6,27 +6,31 @@ services:
     build: .
     container_name: exagerado_backend
     restart: always
-    env_file: .env
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
       - evolution-postgres
       - redis
+    environment:
+      - PYTHONPATH=/app
     networks:
       - evolution-net
 
-  # === WORKER DE INTELIGÊNCIA (TEMPORIZADOR/ESTATÍSTICAS) ===
+  # === WORKER (PROCESSAMENTO / JOBS) ===
   exagerado-worker:
     build: .
     container_name: exagerado_worker
     restart: always
-    env_file: .env
-    command: python app/main_stats.py  # <-- Aqui roda o seu loop de 30 min
-    environment:
-      - PYTHONPATH=/app
+    env_file:
+      - .env
+    command: python app/main_stats.py
     depends_on:
       - evolution-postgres
       - redis
+    environment:
+      - PYTHONPATH=/app
     networks:
       - evolution-net
 
@@ -44,19 +48,18 @@ services:
       - evolution_instances:/evolution/instances
     networks:
       - evolution-net
-    env_file: .env
-    expose:
-      - "8080"
 
-  # === FRONTEND MANAGER ===
-  frontend:
-    container_name: evolution_frontend
-    image: evoapicloud/evolution-manager:latest
-    restart: always
-    ports:
-      - "3000:80"
-    networks:
-      - evolution-net
+    # 🔒 SEM HARDCODE — tudo via .env
+    environment:
+      AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY}
+
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: ${DATABASE_CONNECTION_URI}
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
 
   # === REDIS ===
   redis:
@@ -72,12 +75,11 @@ services:
   # === POSTGRES ===
   evolution-postgres:
     container_name: evolution_postgres
-    image: postgres:15-alpine # Alpine para economizar RAM
+    image: postgres:15-alpine
     restart: always
-    env_file: .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DATABASE}
-      POSTGRES_USER: ${POSTGRES_USERNAME}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
