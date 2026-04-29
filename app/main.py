@@ -98,7 +98,7 @@ async def trigger_full_pipeline(loja_id: int, token: str):
     if token != WEBHOOK_TOKEN:
         raise HTTPException(status_code=401, detail="Token inválido")
     try:
-        resultado = rodar_pipeline_completo(enviar_print=True)
+        resultado = await rodar_pipeline_completo(enviar_print=True)
         
         return {"status": "success", "message": f"Pipeline da loja {loja_id} executado com sucesso!"}
     

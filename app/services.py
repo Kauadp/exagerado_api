@@ -9,7 +9,7 @@ from database import SessionLocal
 from models import VendaItem
 import pandas as pd
 import plotly.express as px
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 import base64
 
 # Configura o logger
@@ -391,7 +391,7 @@ def gerar_html_secao_loja(df_loja, nome_loja):
 
     return html
 
-def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
+async def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
     """
     Gera o HTML e converte para PNG usando a lógica do Dashboard.
     """
@@ -400,11 +400,11 @@ def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
     # === CONVERSÃO PARA PNG (PLAYWRIGHT) ===
     nome_arquivo = f"relatorio_{nome_loja.lower().replace(' ', '_')}.png"
     
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = browser.new_page(viewport={"width": 800, "height": 1000})
-        page.set_content(html_content, wait_until="networkidle")
-        page.screenshot(path=nome_arquivo, full_page=True)
-        browser.close()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        page = await browser.new_page(viewport={"width": 800, "height": 1000})
+        await page.set_content(html_content, wait_until="networkidle")
+        await page.screenshot(path=nome_arquivo, full_page=True)
+        await browser.close()
 
     return nome_arquivo
