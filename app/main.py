@@ -8,6 +8,9 @@ from datetime import datetime
 from main_stats import rodar_pipeline_completo
 from dotenv import load_dotenv
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
 
 load_dotenv()
 
@@ -23,10 +26,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-from dotenv import load_dotenv
-import os
-load_dotenv()
 
 # Mapeamento de IDs da Loja no Bling para Números de WhatsApp
 MAP_LOJAS_WPP = {
@@ -93,12 +92,22 @@ async def receive_print_signal(
         raise HTTPException(status_code=500, detail="Erro interno ao receber o print")
 
 
+executor = ThreadPoolExecutor(max_workers=3)
+
+def executar_pipeline_sync(loja_id, enviar_print):
+    """
+    Esta função roda a lógica original (síncrona) 
+    em uma thread separada para não travar o FastAPI.
+    """
+    return rodar_pipeline_completo(enviar_print=enviar_print)
+
 @app.post("/trigger-pipeline")
 async def trigger_full_pipeline(loja_id: int, token: str):
     if token != WEBHOOK_TOKEN:
         raise HTTPException(status_code=401, detail="Token inválido")
     try:
-        resultado = await rodar_pipeline_completo(enviar_print=True)
+        loop = asyncio.get_event_loop()
+        resultado = await loop.run_in_executor(executor, executar_pipeline_sync, loja_id, True)
         
         return {"status": "success", "message": f"Pipeline da loja {loja_id} executado com sucesso!"}
     
