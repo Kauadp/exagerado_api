@@ -42,7 +42,7 @@ services:
       - evolution_instances:/evolution/instances
     networks:
       - evolution-net
-    env_file: - .env
+    env_file: .env
     expose:
       - "8080"
 
@@ -72,7 +72,7 @@ services:
     container_name: evolution_postgres
     image: postgres:15-alpine # Alpine para economizar RAM
     restart: always
-    env_file: - .env
+    env_file: .env
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE}
       POSTGRES_USER: ${POSTGRES_USERNAME}
