@@ -15,6 +15,7 @@ services:
       - redis
     environment:
       - PYTHONPATH=/app
+      - TZ=America/Sao_Paulo
     networks:
       - evolution-net
 

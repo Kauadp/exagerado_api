@@ -432,7 +432,7 @@ def gerar_relatorio_loja_automatizado(df_loja, nome_loja, loja_id, meta_map):
     """
     Gera o HTML e converte para PNG usando a lógica do Dashboard.
     """
-    html_content = gerar_html_secao_loja(df_loja, nome_loja)
+    html_content = gerar_html_secao_loja(df_loja, nome_loja, loja_id, meta_map)
 
     # === CONVERSÃO PARA PNG (PLAYWRIGHT) ===
     nome_arquivo = f"relatorio_{nome_loja.lower().replace(' ', '_')}.png"

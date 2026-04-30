@@ -1,5 +1,6 @@
 import pandas as pd
 from datetime import datetime, timedelta
+from babel.dates import format_date
 
 class AlertaBase:
     def __init__(self, df_loja, loja_id):
@@ -52,14 +53,14 @@ class AlertaPerformance(AlertaBase):
 
     def gerar_texto(self):
         agora = datetime.now()
-        dia_semana_ontem = (agora - timedelta(days=1)).strftime('%A')
+        dia_semana_ontem = format_date((agora - timedelta(days=1)).strftime('%A'), format='EEEE', locale='pt_BR')
         hora_str = agora.strftime('%Hh')
 
         emoji = "📈" if self.variacao_hora >= 0 else "📉"
         sinal = "+" if self.variacao_hora >= 0 else ""
 
         return (
-            f"{emoji} *Performance Comparativa ({hora_str})*\n\n"
+            f"{emoji} *Performance Comparativa*\n\n"
             f"• {dia_semana_ontem} {hora_str}: R$ {self.venda_ontem_hora:,.2f}\n"
             f"• Hoje {hora_str}: R$ {self.venda_hoje_hora:,.2f} ({sinal}{self.variacao_hora:.1%})\n\n"
             f"🎯 *Projeção de Fechamento:*\n"
