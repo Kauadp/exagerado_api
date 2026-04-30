@@ -11,7 +11,8 @@ import pandas as pd
 import plotly.express as px
 from playwright.sync_api import sync_playwright
 import base64
-
+import json
+import asyncio
 # Configura o logger
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -22,27 +23,53 @@ WPP_TOKEN = os.getenv("AUTHENTICATION_API_KEY")
 
 # --- FUNÇÕES BLING ---
 
+TOKEN_FILE = "/data/bling_tokens.json"
+
+def load_tokens():
+    if not os.path.exists(TOKEN_FILE):
+        raise Exception("Token não inicializado.")
+    with open(TOKEN_FILE, "r") as f:
+        return json.load(f)
+
+def save_tokens(access_token, refresh_token):
+    with open(TOKEN_FILE, "w") as f:
+        json.dump({
+            "access_token": access_token,
+            "refresh_token": refresh_token
+        }, f)
+
+token_lock = asyncio.Lock()
+
 async def get_new_token():
-    url = "https://www.bling.com.br/Api/v3/oauth/token"
-    data = {
-        'grant_type': 'refresh_token',
-        'refresh_token': settings.BLING_REFRESH_TOKEN
-    }
-    async with httpx.AsyncClient() as client:
-        auth = (settings.BLING_CLIENT_ID, settings.BLING_CLIENT_SECRET)
-        response = await client.post(url, data=data, auth=auth)
-        if response.status_code == 200:
+    async with token_lock:
+        tokens = load_tokens()
+
+        url = "https://www.bling.com.br/Api/v3/oauth/token"
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"]
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            auth = (settings.BLING_CLIENT_ID, settings.BLING_CLIENT_SECRET)
+            response = await client.post(url, data=data, auth=auth)
+
+            if response.status_code != 200:
+                raise Exception(f"Erro ao renovar token: {response.text}")
+
             new_data = response.json()
-            settings.BLING_ACCESS_TOKEN = new_data['access_token']
-            set_key(".env", "BLING_ACCESS_TOKEN", settings.BLING_ACCESS_TOKEN)
-            if new_data.get('refresh_token'):
-                set_key(".env", "BLING_REFRESH_TOKEN", new_data['refresh_token'])
-            return settings.BLING_ACCESS_TOKEN
-        return None
+
+            access_token = new_data["access_token"]
+            refresh_token = new_data.get("refresh_token", tokens["refresh_token"])
+
+            save_tokens(access_token, refresh_token)
+
+            return access_token
 
 async def fetch_estoque_atual(id_produto: int):
     url = f"https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]={id_produto}"
-    headers = {"Authorization": f"Bearer {settings.BLING_ACCESS_TOKEN}"}
+    tokens = load_tokens()
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         if response.status_code == 200:
@@ -55,17 +82,24 @@ async def fetch_estoque_atual(id_produto: int):
 async def processar_venda_completa(id_nota: int):
     logger.debug(f"🔍 Iniciando processamento da nota: {id_nota}")
     url = f"https://www.bling.com.br/Api/v3/nfce/{id_nota}"
-    headers = {"Authorization": f"Bearer {settings.BLING_ACCESS_TOKEN}"}
+    tokens = load_tokens()
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         
         if response.status_code == 401:
-            token = await get_new_token()
-            if token:
+            tokens = load_tokens()
+
+            headers["Authorization"] = f"Bearer {tokens['access_token']}"
+            response = await client.get(url, headers=headers)
+
+            if response.status_code == 401:
+                # realmente precisa renovar
+                token = await get_new_token()
+
                 headers["Authorization"] = f"Bearer {token}"
                 response = await client.get(url, headers=headers)
-
         if response.status_code == 200:
             venda = response.json().get("data", {})
             itens = venda.get("itens", [])

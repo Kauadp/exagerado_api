@@ -18,6 +18,8 @@ services:
       - TZ=America/Sao_Paulo
     networks:
       - evolution-net
+    volumes:
+      - ./data:/data
 
   # === WORKER (PROCESSAMENTO / JOBS) ===
   exagerado-worker:
@@ -35,6 +37,8 @@ services:
       - TZ=America/Sao_Paulo
     networks:
       - evolution-net
+    volumes:
+      - ./data:/data
 
   # === EVOLUTION API ===
   api:
