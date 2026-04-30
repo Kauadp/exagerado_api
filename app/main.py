@@ -29,7 +29,39 @@ logger = logging.getLogger(__name__)
 
 # Mapeamento de IDs da Loja no Bling para Números de WhatsApp
 MAP_LOJAS_WPP = {
-    205906072: os.getenv("WPP_NUMBER_TEST")  # Ex: Gerente Loja 1
+    205709335: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_KENNYON"), 
+        os.getenv("WPP_NUMBER_ISAAC")
+    ],
+    205709338: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_HENRIQUE") 
+    ],
+    205785185: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_GRAZI") 
+    ],
+    206057004: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_SAMILA") 
+    ],
+    205613392: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ],
+    205406209: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ],
+    206057013: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MALU") 
+    ],
+    206057007: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ]
 }
 
 # Cria as tabelas na inicialização
@@ -73,19 +105,19 @@ async def receive_print_signal(
 
     try:
         content = await file.read()
-        numero_destino = MAP_LOJAS_WPP.get(loja_id)
+        numero_destino = MAP_LOJAS_WPP.get(loja_id, [])
         logger.info(f"\n📸 [SINAL RECEBIDO] - {agora}")
         legenda = f"📸 *Dashboard Capturado* - Loja {loja_id}\nEm: {datetime.now().strftime('%H:%M:%S')}"
-        
-        background_tasks.add_task(
-            enviar_imagem_whatsapp, 
-            numero_destino, 
-            legenda, 
-            content, 
-            file.filename
-        )
+        for numero in numero_destino:
+            background_tasks.add_task(
+                enviar_imagem_whatsapp, 
+                numero, 
+                legenda, 
+                content, 
+                file.filename
+            )
 
-        return {"status": "sent_to_queue", "target": numero_destino}
+            return {"status": "sent_to_queue", "target": numero}
 
     except Exception as e:
         logger.error(f"💥 Erro ao processar sinal de print: {str(e)}")

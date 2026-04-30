@@ -16,9 +16,63 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-LOJAS_ATIVAS = [205906072] 
+LOJAS_ATIVAS = [205709335, 205709338, 205785185, 206057004, 205613392, 205406209, 206057013, 206057007] 
 MAP_LOJAS_WPP = {
-    205906072: os.getenv("WPP_NUMBER_TEST"),
+    205709335: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_KENNYON"), 
+        os.getenv("WPP_NUMBER_ISAAC")
+    ],
+    205709338: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_HENRIQUE") 
+    ],
+    205785185: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_GRAZI") 
+    ],
+    206057004: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_SAMILA") 
+    ],
+    205613392: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ],
+    205406209: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ],
+    206057013: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MALU") 
+    ],
+    206057007: [
+        os.getenv("WPP_NUMBER_KAUA"), 
+        os.getenv("WPP_NUMBER_MAURICIO") 
+    ]
+}
+
+map_lojas = {
+    205709335: "Vans",
+    205709338: "Arezzo",
+    205785185: "Off Premium",
+    206057004: "Ida",
+    205613392: "Aramis",
+    205406209: "High",
+    206057013: "Vix",
+    206057007: "Surto dos 50"
+}
+
+meta_map = {
+    205709335: 250000,  # Meta de vendas para a loja Vans
+    205709338: 300000,  # Meta de vendas para a loja Arezzo
+    205785185: 600000,  # Meta de vendas para a loja Off Premium
+    206057004: 400000,   # Meta de vendas para a loja Ida
+    205613392: 300000,  # Meta de vendas para a loja Aramis
+    205406209: 150000,   # Meta de vendas para a loja High
+    206057013: 150000,   # Meta de vendas para a loja Vix
+    206057007: 30000   # Meta de vendas para a loja Surto dos 50
 }
 
 def rodar_pipeline_completo(enviar_print=False):
@@ -42,50 +96,53 @@ def rodar_pipeline_completo(enviar_print=False):
 
     for loja_id in LOJAS_ATIVAS:
         df_loja = df_geral[df_geral['id_loja'] == loja_id]
-        numero_destino = MAP_LOJAS_WPP.get(loja_id)
+        numero_destino = MAP_LOJAS_WPP.get(loja_id, [])
         
         if df_loja.empty or not numero_destino:
             continue
 
-        # --- 1. INSIGHTS DE TEXTO (Sempre que o pipeline rodar) ---
-        processadores = [
-            AlertaPerformance(df_loja, loja_id),
-            AlertaRanking(df_loja, loja_id),
-            AlertaLogistica(df_loja, loja_id),
-            AlertaBayes(df_loja, loja_id)
-        ]
+        for numero in numero_destino:
 
-        relatorio_texto = []
-        for p in processadores:
-            try:
-                p.analisar()
-                texto = p.gerar_texto()
-                if texto: relatorio_texto.append(texto)
-            except Exception as e:
-                logger.error(f"❌ Erro no {p.__class__.__name__}: {e}")
+            # --- 1. INSIGHTS DE TEXTO (Sempre que o pipeline rodar) ---
+            processadores = [
+                AlertaPerformance(df_loja, loja_id),
+                AlertaRanking(df_loja, loja_id),
+                AlertaLogistica(df_loja, loja_id),
+                AlertaBayes(df_loja, loja_id)
+            ]
+            nome_loja = map_lojas.get(loja_id)
 
-        if relatorio_texto:
-            cabecalho = f"📊 *INSIGHTS EXAGERADO*\n🕒 {agora.strftime('%H:%M')}\n"
-            mensagem_final = cabecalho + "\n\n---\n\n".join(relatorio_texto)
-            asyncio.run(enviar_mensagem_whatsapp(numero_destino, mensagem_final))
+            relatorio_texto = []
+            for p in processadores:
+                try:
+                    p.analisar()
+                    texto = p.gerar_texto()
+                    if texto: relatorio_texto.append(texto)
+                except Exception as e:
+                    logger.error(f"❌ Erro no {p.__class__.__name__}: {e}")
 
-        # --- 2. RELATÓRIO VISUAL (Apenas se enviar_print for True) ---
-        if enviar_print:
-            logger.info(f"📸 Gerando print para Loja {loja_id}...")
-            try:
-                caminho_img = gerar_relatorio_loja_automatizado(df_loja, f"Loja {loja_id}")
-                with open(caminho_img, "rb") as f:
-                    img_data = f.read()
-                    asyncio.run(enviar_imagem_whatsapp(
-                        numero_destino, 
-                        f"🖼️ *RELATÓRIO HORA EM HORA* - {agora.hour}h", 
-                        img_data, 
-                        caminho_img
-                    ))
-                if os.path.exists(caminho_img):
-                    os.remove(caminho_img)
-            except Exception as e:
-                logger.error(f"❌ Erro no print: {e}")
+            if relatorio_texto:
+                cabecalho = f"📊 *INSIGHTS EXAGERADO - Loja {nome_loja}*\n🕒 {agora.strftime('%H:%M')}\n"
+                mensagem_final = cabecalho + "\n\n---\n\n".join(relatorio_texto)
+                asyncio.run(enviar_mensagem_whatsapp(numero, mensagem_final))
+
+            # --- 2. RELATÓRIO VISUAL (Apenas se enviar_print for True) ---
+            if enviar_print:
+                logger.info(f"📸 Gerando print para Loja {loja_id}...")
+                try:
+                    caminho_img = gerar_relatorio_loja_automatizado(df_loja, nome_loja, loja_id, meta_map)
+                    with open(caminho_img, "rb") as f:
+                        img_data = f.read()
+                        asyncio.run(enviar_imagem_whatsapp(
+                            numero, 
+                            f"🖼️ *RELATÓRIO HORA EM HORA* - {agora.hour}h", 
+                            img_data, 
+                            caminho_img
+                        ))
+                    if os.path.exists(caminho_img):
+                        os.remove(caminho_img)
+                except Exception as e:
+                    logger.error(f"❌ Erro no print: {e}")
 
 if __name__ == "__main__":
     logger.info("🚀 Sistema Exagerado Insights Iniciado!")

@@ -168,10 +168,13 @@ async def enviar_imagem_whatsapp(numero: str, caption: str, file_content: bytes,
         logger.error(f"❌ Erro ao enviar Imagem Zap: {e}")
         return {"status": "error", "message": str(e)}
 
-def gerar_html_secao_loja(df_loja, nome_loja):
+def gerar_html_secao_loja(df_loja, nome_loja, loja_id, meta_map):
+
+    import pandas as pd
+    import plotly.express as px
 
     # =========================
-    # SEGURANÇA (EVITA CRASH)
+    # SEGURANÇA
     # =========================
     if df_loja is None or df_loja.empty:
         return """
@@ -194,12 +197,32 @@ def gerar_html_secao_loja(df_loja, nome_loja):
     # =========================
     dias = df_loja["data"].nunique()
     dias_totais = 6
+
     projecao = (faturamento / dias) * dias_totais if dias > 0 else 0
 
-    percentual = (faturamento / projecao * 100) if projecao > 0 else 0
+    # =========================
+    # META
+    # =========================
+    meta_loja = meta_map.get(loja_id, 0)
+
+    atingimento = (faturamento / meta_loja * 100) if meta_loja > 0 else 0
+    atingimento_proj = (projecao / meta_loja * 100) if meta_loja > 0 else 0
+
+    if meta_loja == 0:
+        status_meta = "Sem meta definida"
+        cor_status = "#6B7280"
+    elif atingimento >= 100:
+        status_meta = "🔥 Meta atingida"
+        cor_status = "#10B981"
+    elif atingimento_proj >= 100:
+        status_meta = "📈 Deve atingir a meta"
+        cor_status = "#F59E0B"
+    else:
+        status_meta = "⚠️ Abaixo da meta"
+        cor_status = "#EF4444"
 
     # =========================
-    # HORAS (INSIGHT OPERACIONAL)
+    # HORAS
     # =========================
     faturamento_hora = (
         df_loja.groupby('hora')['valor_total']
@@ -222,8 +245,7 @@ def gerar_html_secao_loja(df_loja, nome_loja):
         status_hora = "🔥 Acima da média" if valor_ultima_hora >= media_hora else "⚠️ Abaixo da média"
     else:
         melhor_hora = pior_hora = ultima_hora = "-"
-        valor_ultima_hora = 0
-        pico = vale = 0
+        valor_ultima_hora = pico = vale = 0
         status_hora = "Sem dados"
 
     # =========================
@@ -248,13 +270,20 @@ def gerar_html_secao_loja(df_loja, nome_loja):
 
     fig.update_traces(line=dict(color="#6B3FA0", width=3))
 
+    fig.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False),
+        yaxis=dict(gridcolor='rgba(0,0,0,0.05)')
+    )
+
     grafico_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
 
     # =========================
     # TOP PRODUTOS
     # =========================
 
-    # 💰 FATURAMENTO
+    # FATURAMENTO
     top_fat = (
         df_loja.groupby('nome_produto')['valor_total']
         .sum()
@@ -268,7 +297,7 @@ def gerar_html_secao_loja(df_loja, nome_loja):
         for _, row in top_fat.iterrows()
     ])
 
-    # 📦 QUANTIDADE
+    # QUANTIDADE
     top_qtd = (
         df_loja.groupby('nome_produto')['quantidade']
         .sum()
@@ -282,7 +311,7 @@ def gerar_html_secao_loja(df_loja, nome_loja):
         for _, row in top_qtd.iterrows()
     ])
 
-    # 🔥 ATUAL (RECENTE)
+    # RECENTE
     ultimas_horas = faturamento_hora.tail(2)['hora'].tolist() if not faturamento_hora.empty else []
 
     df_recente = df_loja[df_loja['hora'].isin(ultimas_horas)]
@@ -302,11 +331,6 @@ def gerar_html_secao_loja(df_loja, nome_loja):
             f"<li><b>{row['nome_produto']}</b> — R$ {row['valor_total']:,.2f}</li>"
             for _, row in top_recente.iterrows()
         ])
-
-    # =========================
-    # STATUS COR
-    # =========================
-    cor_status = "#10B981" if percentual >= 100 else "#F59E0B" if percentual >= 80 else "#EF4444"
 
     # =========================
     # HTML FINAL
@@ -334,8 +358,18 @@ def gerar_html_secao_loja(df_loja, nome_loja):
 
                 <hr>
 
+                <p><b>🎯 Meta:</b> R$ {meta_loja:,.2f}</p>
+
+                <p style="color:{cor_status};font-weight:bold;font-size:16px;">
+                    📊 {atingimento:.0f}% da meta
+                </p>
+
+                <p style="color:#6B7280;">
+                    🔮 Projeção: R$ {projecao:,.2f} ({atingimento_proj:.0f}%)
+                </p>
+
                 <p style="color:{cor_status};font-weight:bold;">
-                    📊 {percentual:.0f}% da projeção (R$ {projecao:,.2f})
+                    {status_meta}
                 </p>
 
             </div>
@@ -345,8 +379,11 @@ def gerar_html_secao_loja(df_loja, nome_loja):
 
                 <b>⏱ Agora</b>
 
-                <p>Última hora: {ultima_hora}h (R$ {valor_ultima_hora:,.2f})</p>
-                <p>{status_hora}</p>
+                <p><b>Última hora:</b> {ultima_hora}h — R$ {valor_ultima_hora:,.2f}</p>
+
+                <p style="color:{'#10B981' if 'Acima' in status_hora else '#EF4444'};">
+                    {status_hora}
+                </p>
 
             </div>
 
@@ -391,7 +428,7 @@ def gerar_html_secao_loja(df_loja, nome_loja):
 
     return html
 
-def gerar_relatorio_loja_automatizado(df_loja, nome_loja):
+def gerar_relatorio_loja_automatizado(df_loja, nome_loja, loja_id, meta_map):
     """
     Gera o HTML e converte para PNG usando a lógica do Dashboard.
     """
