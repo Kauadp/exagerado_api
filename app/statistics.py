@@ -53,7 +53,7 @@ class AlertaPerformance(AlertaBase):
 
     def gerar_texto(self):
         agora = datetime.now()
-        dia_semana_ontem = format_date((agora - timedelta(days=1)).strftime('%A'), format='EEEE', locale='pt_BR')
+        dia_semana_ontem = format_date(agora - timedelta(days=1), format='EEEE', locale='pt_BR')
         hora_str = agora.strftime('%Hh')
 
         emoji = "📈" if self.variacao_hora >= 0 else "📉"
