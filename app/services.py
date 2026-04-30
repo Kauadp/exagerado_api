@@ -27,7 +27,13 @@ TOKEN_FILE = "/data/bling_tokens.json"
 
 def load_tokens():
     if not os.path.exists(TOKEN_FILE):
-        raise Exception("Token não inicializado.")
+        data = {
+            "access_token": settings.BLING_ACCESS_TOKEN,
+            "refresh_token": settings.BLING_REFRESH_TOKEN
+        }
+        with open(TOKEN_FILE, "w") as f:
+            json.dump(data, f)
+        return data
     with open(TOKEN_FILE, "r") as f:
         return json.load(f)
 
