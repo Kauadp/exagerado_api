@@ -48,11 +48,11 @@ MAP_LOJAS_WPP = {
     ],
     205613392: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_MAURICIO") 
+        os.getenv("WPP_NUMBER_CARLOS") # Aramis
     ],
     205406209: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_MAURICIO") 
+        os.getenv("WPP_NUMBER_DON") # High
     ],
     206057013: [
         os.getenv("WPP_NUMBER_KAUA"), 
@@ -60,7 +60,7 @@ MAP_LOJAS_WPP = {
     ],
     206057007: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_MAURICIO") 
+        os.getenv("WPP_NUMBER_GUSTAVO") # Surto 
     ]
 }
 
