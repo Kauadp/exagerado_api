@@ -25,31 +25,38 @@ MAP_LOJAS_WPP = {
     ],
     205709338: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_HENRIQUE") 
+        os.getenv("WPP_NUMBER_HENRIQUE"),
+        os.getenv("WPP_NUMBER_ISAAC") 
     ],
     205785185: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_GRAZI") 
+        os.getenv("WPP_NUMBER_GRAZI"),
+        os.getenv("WPP_NUMBER_ISAAC") 
     ],
     206057004: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_SAMILA") 
+        os.getenv("WPP_NUMBER_SAMILA"),
+        os.getenv("WPP_NUMBER_ISAAC") 
     ],
     205613392: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_CARLOS") # Aramis
+        os.getenv("WPP_NUMBER_CARLOS"),
+        os.getenv("WPP_NUMBER_ISAAC")
     ],
     205406209: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_DON") # High
+        os.getenv("WPP_NUMBER_DON"),
+        os.getenv("WPP_NUMBER_ISAAC")
     ],
     206057013: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_MALU") 
+        os.getenv("WPP_NUMBER_MALU"),
+        os.getenv("WPP_NUMBER_ISAAC")
     ],
     206057007: [
         os.getenv("WPP_NUMBER_KAUA"), 
-        os.getenv("WPP_NUMBER_GUSTAVO") # Surto 
+        os.getenv("WPP_NUMBER_GUSTAVO"),
+        os.getenv("WPP_NUMBER_ISAAC") 
     ]
 }
 
