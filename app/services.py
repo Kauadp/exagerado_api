@@ -72,16 +72,27 @@ async def get_new_token():
 
             return access_token
 
-async def fetch_estoque_atual(id_produto: int):
-    url = f"https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]={id_produto}"
+async def fetch_estoque_atual(sku: str):
+    url = f"https://www.bling.com.br/Api/v3/estoques/saldos?codigos[]={sku}"
+    
     tokens = load_tokens()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code == 200:
-            data = response.json().get("data", [])
-            return data[0].get("saldoFisicoTotal", 0) if data else 0
-        return 0
+        for tentativa in range(3):
+            response = await client.get(url, headers=headers)
+
+            if response.status_code == 200:
+                data = response.json().get("data", [])
+                return data[0].get("saldoFisicoTotal", 0) if data else 0
+
+            if response.status_code == 429:
+                await asyncio.sleep(2 ** tentativa)
+                continue
+
+            break
+
+    return None  # melhor que 0, pra saber que falhou
 
 # --- FUNÇÃO PRINCIPAL DE PROCESSAMENTO ---
 
@@ -114,19 +125,18 @@ async def processar_venda_completa(id_nota: int):
             db = SessionLocal()
             try:
                 for item in itens:
-                    id_prod = item.get("id") or item.get("produto", {}).get("id")
                     sku = item.get("codigo") or "S-SKU"
                     descricao = item.get("descricao")
                     valor = item.get("valor")
                     qtd = item.get("quantidade")
                     
-                    estoque_restante = 0
-                    if id_prod and sku != "AVULSO":
-                        estoque_restante = await fetch_estoque_atual(id_prod)
+                    estoque_restante = None
+                    if sku and sku != "AVULSO":
+                        estoque_restante = await fetch_estoque_atual(sku)
 
                     dados_venda = {
                         "venda_id": id_nota,
-                        "produto_id": id_prod,
+                        "produto_id": sku,
                         "id_loja": venda.get("loja", {}).get("id", 0),
                         "sku": sku,
                         "nome_produto": descricao,

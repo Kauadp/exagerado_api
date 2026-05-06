@@ -10,17 +10,6 @@ from models import VendaItem
 BASE_URL = "https://www.bling.com.br/Api/v3/nfce"
 
 # =========================
-# VERIFICA SE JÁ FOI PROCESSADO
-# =========================
-def ja_processado(id_nota):
-    db = SessionLocal()
-    try:
-        existe = db.query(VendaItem).filter(VendaItem.venda_id == id_nota).first()
-        return existe is not None
-    finally:
-        db.close()
-
-# =========================
 # BUSCAR NOTAS
 # =========================
 async def buscar_notas(data_inicio, data_fim):
@@ -33,8 +22,8 @@ async def buscar_notas(data_inicio, data_fim):
     async with httpx.AsyncClient(timeout=20.0) as client:
         while True:
             params = {
-                "dataInicial": data_inicio,
-                "dataFinal": data_fim,
+                "dataEmissaoInicial": data_inicio,
+                "dataEmissaoFinal": data_fim,
                 "pagina": pagina
             }
 
@@ -68,16 +57,18 @@ async def buscar_notas(data_inicio, data_fim):
 async def processar_com_retry(id_nota, tentativas=3):
     for tentativa in range(tentativas):
         try:
-            if ja_processado(id_nota):
-                print(f"SKIP {id_nota}")
-                return True
+            # 🔥 força reprocessamento limpo
+            db = SessionLocal()
+            db.query(VendaItem).filter(VendaItem.venda_id == id_nota).delete()
+            db.commit()
+            db.close()
 
             await processar_venda_completa(id_nota)
             print(f"OK {id_nota}")
             return True
 
         except Exception as e:
-            print(f"Erro {id_nota} (tentativa {tentativa+1}): {e}")
+            print(f"Erro {id_nota}: {e}")
             await asyncio.sleep(2 ** tentativa)
 
     print(f"FALHOU {id_nota}")
@@ -87,7 +78,7 @@ async def processar_com_retry(id_nota, tentativas=3):
 # PROCESSAMENTO EM LOTE
 # =========================
 async def processar_em_lote(notas_ids):
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(2)
 
     async def worker(id_nota):
         async with semaphore:
@@ -111,4 +102,4 @@ async def rodar_backfill(data_inicio, data_fim):
     print("✅ Backfill finalizado!")
 
 if __name__ == "__main__":
-    asyncio.run(rodar_backfill("2026-05-05", "2026-05-05"))
+    asyncio.run(rodar_backfill("2026-05-05 00:00:00", "2026-05-05 23:59:59"))
