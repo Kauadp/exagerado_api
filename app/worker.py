@@ -25,8 +25,12 @@ async def processar_evento(evento_id):
             db.commit()
 
         except Exception as e:
-            evento.status = "error"
             evento.tentativas += 1
+            if "NOTA_NAO_ENCONTRADA" in str(e):
+                evento.status = "pending"
+            if "RATE_LIMIT" in str(e):
+                evento.status = "pending"
+            evento.status = "error"
             logger.error(f"Erro no evento {evento.id_nota}: {e}")
             db.commit()
 

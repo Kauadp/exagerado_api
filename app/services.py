@@ -115,6 +115,15 @@ async def processar_venda_completa(id_nota: int):
                 headers["Authorization"] = f"Bearer {token}"
                 response = await client.get(url, headers=headers)
 
+        if response.status_code == 404:
+            logger.warning(f"⚠️ Nota {id_nota} não encontrada na API do Bling.")
+            raise Exception("NOTA_NAO_ENCONTRADA")
+
+        if response.status_code == 429:
+            await asyncio.sleep(2)
+            raise Exception("RATE_LIMIT")
+
+
         if response.status_code != 200:
             raise Exception(f"Erro HTTP {response.status_code}: {response.text}")
 
