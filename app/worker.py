@@ -25,15 +25,40 @@ async def processar_evento(evento_id):
             db.commit()
 
         except Exception as e:
-            evento.tentativas += 1
-            if "NOTA_NAO_ENCONTRADA" in str(e):
-                evento.status = "pending"
-            if "RATE_LIMIT" in str(e):
-                evento.status = "pending"
-            evento.status = "error"
-            logger.error(f"Erro no evento {evento.id_nota}: {e}")
-            db.commit()
+            erro = str(e)
 
+            if "NOTA_NAO_ENCONTRADA" in erro:
+                evento.tentativas += 1
+
+                if evento.tentativas >= 5:
+                    evento.status = "ignored"
+                else:
+                    evento.status = "pending"
+
+                logger.warning(f"⚠️ Nota {evento.id_nota} não encontrada (tentativa {evento.tentativas})")
+
+                db.commit()
+                await asyncio.sleep(5)
+                return
+
+            elif "RATE_LIMIT" in erro:
+                evento.tentativas += 1
+                evento.status = "pending"
+
+                logger.warning(f"⏳ Rate limit (tentativa {evento.tentativas})")
+
+                db.commit()
+                await asyncio.sleep(2 ** evento.tentativas)
+                return
+
+            else:
+                evento.tentativas += 1
+                evento.status = "error"
+
+                logger.error(f"❌ Erro no evento {evento.id_nota}: {e}")
+
+                db.commit()
+                return
     finally:
         db.close()
 
