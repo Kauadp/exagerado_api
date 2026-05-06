@@ -64,7 +64,7 @@ async def worker_loop():
                 )
                 .with_for_update(skip_locked=True)
                 .order_by(WebhookEvent.criado_em.asc())  # processa mais antigos primeiro
-                .limit(10)
+                .limit(20)
                 .all()
             )
 

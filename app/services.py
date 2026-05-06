@@ -109,21 +109,15 @@ async def processar_venda_completa(id_nota: int):
             tokens = load_tokens()
             headers["Authorization"] = f"Bearer {tokens['access_token']}"
             response = await client.get(url, headers=headers)
-
             if response.status_code == 401:
                 token = await get_new_token()
                 headers["Authorization"] = f"Bearer {token}"
                 response = await client.get(url, headers=headers)
 
         if response.status_code == 404:
-            logger.warning(f"⚠️ Nota {id_nota} não encontrada na API do Bling.")
             raise Exception("NOTA_NAO_ENCONTRADA")
-
         if response.status_code == 429:
-            await asyncio.sleep(2)
             raise Exception("RATE_LIMIT")
-
-
         if response.status_code != 200:
             raise Exception(f"Erro HTTP {response.status_code}: {response.text}")
 
@@ -131,41 +125,40 @@ async def processar_venda_completa(id_nota: int):
         itens = venda.get("itens", [])
         logger.info(f"📦 Nota {id_nota} contém {len(itens)} itens.")
 
-        for linha, item in enumerate(itens):  # ← loop FORA do try/db
-            sku = item.get("codigo") or "S-SKU"
-            descricao = item.get("descricao")
-            valor = item.get("valor")
-            qtd = item.get("quantidade")
-
-            dados_venda = {
-                "venda_id": id_nota,
-                "produto_id": sku,
-                "id_loja": venda.get("loja", {}).get("id", 0),
-                "sku": sku,
-                "linha": linha,
-                "nome_produto": descricao,
-                "valor_unitario": valor,
-                "quantidade": qtd,
-                "valor_total": valor * qtd,
-                "estoque_pos_venda": None,
-                "timestamp": venda.get("dataEmissao")
-            }
-
-            db = SessionLocal()
-            try:
+        # ← UMA conexão pra nota inteira
+        db = SessionLocal()
+        try:
+            for linha, item in enumerate(itens):
+                sku = item.get("codigo") or "S-SKU"
+                dados_venda = {
+                    "venda_id": id_nota,
+                    "produto_id": sku,
+                    "id_loja": venda.get("loja", {}).get("id", 0),
+                    "sku": sku,
+                    "linha": linha,
+                    "nome_produto": item.get("descricao"),
+                    "valor_unitario": item.get("valor"),
+                    "quantidade": item.get("quantidade"),
+                    "valor_total": item.get("valor") * item.get("quantidade"),
+                    "estoque_pos_venda": None,
+                    "timestamp": venda.get("dataEmissao")
+                }
                 stmt = insert(VendaItem).values(dados_venda)
                 stmt = stmt.on_conflict_do_update(
                     constraint="unique_venda_item",
                     set_=dados_venda
                 )
                 db.execute(stmt)
-                db.commit()  # ← só um commit
-                logger.info(f"✅ Item SKU={sku} nota={id_nota} salvo!")
-            except Exception as e:
-                db.rollback()
-                logger.error(f"❌ Item SKU={sku} nota={id_nota}: {e}")
-            finally:
-                db.close()
+
+            db.commit()  # ← um commit pra nota inteira
+            logger.info(f"✅ Nota {id_nota} processada!")
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Erro nota {id_nota}: {e}")
+            raise  # ← propaga pro worker tratar
+        finally:
+            db.close()
 
 # --- FUNÇÃO WHATSAPP ---
 
