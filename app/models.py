@@ -1,5 +1,26 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger
+from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger, UniqueConstraint
 from database import Base
+from datetime import datetime
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_nota = Column(Integer, index=True)
+
+    status = Column(String, default="pending")
+    # pending = chegou
+    # processing = sendo processado
+    # done = processado 
+    # error = falhou
+
+    __table_args__ = (
+        UniqueConstraint('id_nota', name='unique_id_nota'),
+    )
+
+    tentativas = Column(Integer, default=0)
+    
+    criado_em = Column(DateTime, default=datetime.utcnow)
 
 class VendaItem(Base):
     __tablename__ = "vendas_itens"

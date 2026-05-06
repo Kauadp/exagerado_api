@@ -40,6 +40,24 @@ services:
     volumes:
       - ./data:/data
 
+  # === WORKER FILA (processa webhook) ===
+exagerado-queue-worker:
+  build: .
+  container_name: exagerado_queue_worker
+  restart: always
+  env_file:
+    - .env
+  command: python app/worker.py
+  depends_on:
+    - evolution-postgres
+  environment:
+    - PYTHONPATH=/app
+    - TZ=America/Sao_Paulo
+  networks:
+    - evolution-net
+  volumes:
+    - ./data:/data
+
   # === EVOLUTION API ===
   api:
     container_name: evolution_api

@@ -76,7 +76,7 @@ async def fetch_estoque_atual(id_produto: int):
     url = f"https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]={id_produto}"
     tokens = load_tokens()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json().get("data", [])
@@ -91,7 +91,7 @@ async def processar_venda_completa(id_nota: int):
     tokens = load_tokens()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url, headers=headers)
         
         if response.status_code == 401:
@@ -172,7 +172,7 @@ async def enviar_mensagem_whatsapp(numero: str, texto: str):
     }
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(WPP_URL_COMPLETA, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -200,7 +200,7 @@ async def enviar_imagem_whatsapp(numero: str, caption: str, file_content: bytes,
     }
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url_media, data=payload, files=files, headers=headers)
             response.raise_for_status()
             return response.json()

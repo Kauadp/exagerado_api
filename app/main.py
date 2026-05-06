@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, UploadFile, File, Form
 from config import settings
-from database import engine, Base
+from database import engine, Base, SessionLocal
 from services import processar_venda_completa, enviar_imagem_whatsapp
 import logging
 from datetime import datetime
@@ -11,6 +11,9 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+from models import WebhookEvent
+from worker import worker_loop
+from sqlalchemy.exc import IntegrityError
 
 load_dotenv()
 
@@ -77,7 +80,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Exagerado Insights API")
 
 @app.post("/webhook")
-async def bling_webhook(request: Request, token: str, background_tasks: BackgroundTasks):
+async def bling_webhook(request: Request, token: str):
     if token != settings.WEBHOOK_TOKEN:
         raise HTTPException(status_code=401, detail="Não Autorizado")
     
@@ -85,10 +88,19 @@ async def bling_webhook(request: Request, token: str, background_tasks: Backgrou
     id_nota = payload.get("data", {}).get("id")
 
     if id_nota:
-        background_tasks.add_task(processar_venda_completa, id_nota)
-        return {"status": "success", "message": "Processando nota..."}
-    
-    return {"status": "error", "message": "ID não encontrado"}
+        db = SessionLocal()
+        try:
+            evento = WebhookEvent(id_nota=id_nota)
+            db.add(evento)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            logger.info(f"Nota {id_nota} já está na fila")
+
+        finally:
+            db.close()
+        
+        return {"status": "queued", "message": "Evento salvo para processamento"}
 
 @app.post("/alerts/send-print")
 async def receive_print_signal(
