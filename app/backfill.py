@@ -78,7 +78,7 @@ async def processar_com_retry(id_nota, tentativas=3):
 # PROCESSAMENTO EM LOTE
 # =========================
 async def processar_em_lote(notas_ids):
-    semaphore = asyncio.Semaphore(2)
+    semaphore = asyncio.Semaphore(1)
 
     async def worker(id_nota):
         async with semaphore:

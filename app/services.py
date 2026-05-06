@@ -104,62 +104,57 @@ async def processar_venda_completa(id_nota: int):
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url, headers=headers)
-        
+
         if response.status_code == 401:
             tokens = load_tokens()
-
             headers["Authorization"] = f"Bearer {tokens['access_token']}"
             response = await client.get(url, headers=headers)
 
             if response.status_code == 401:
-                # realmente precisa renovar
                 token = await get_new_token()
-
                 headers["Authorization"] = f"Bearer {token}"
                 response = await client.get(url, headers=headers)
-        if response.status_code == 200:
-            venda = response.json().get("data", {})
-            itens = venda.get("itens", [])
-            logger.info(f"📦 Nota {id_nota} contém {len(itens)} itens.")
-            
+
+        if response.status_code != 200:
+            raise Exception(f"Erro HTTP {response.status_code}: {response.text}")
+
+        venda = response.json().get("data", {})
+        itens = venda.get("itens", [])
+        logger.info(f"📦 Nota {id_nota} contém {len(itens)} itens.")
+
+        for linha, item in enumerate(itens):  # ← loop FORA do try/db
+            sku = item.get("codigo") or "S-SKU"
+            descricao = item.get("descricao")
+            valor = item.get("valor")
+            qtd = item.get("quantidade")
+
+            dados_venda = {
+                "venda_id": id_nota,
+                "produto_id": sku,
+                "id_loja": venda.get("loja", {}).get("id", 0),
+                "sku": sku,
+                "linha": linha,
+                "nome_produto": descricao,
+                "valor_unitario": valor,
+                "quantidade": qtd,
+                "valor_total": valor * qtd,
+                "estoque_pos_venda": None,
+                "timestamp": venda.get("dataEmissao")
+            }
+
             db = SessionLocal()
             try:
-                for item in itens:
-                    sku = item.get("codigo") or "S-SKU"
-                    descricao = item.get("descricao")
-                    valor = item.get("valor")
-                    qtd = item.get("quantidade")
-                    
-                    estoque_restante = None
-                    #if sku and sku != "AVULSO":
-                        #estoque_restante = await fetch_estoque_atual(sku)
-
-                    dados_venda = {
-                        "venda_id": id_nota,
-                        "produto_id": sku,
-                        "id_loja": venda.get("loja", {}).get("id", 0),
-                        "sku": sku,
-                        "nome_produto": descricao,
-                        "valor_unitario": valor,
-                        "quantidade": qtd,
-                        "valor_total": valor * qtd,
-                        "estoque_pos_venda": estoque_restante,
-                        "timestamp": venda.get("dataEmissao")
-                    }
-
-                    stmt = insert(VendaItem).values(dados_venda)
-                    stmt = stmt.on_conflict_do_update(
-                        constraint="unique_venda_item",
-                        set_=dados_venda
-                    )
-                    db.execute(stmt)
-                
-                db.commit()
-                logger.info(f"✅ Nota {id_nota} processada!")
-                
+                stmt = insert(VendaItem).values(dados_venda)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="unique_venda_item",
+                    set_=dados_venda
+                )
+                db.execute(stmt)
+                db.commit()  # ← só um commit
+                logger.info(f"✅ Item SKU={sku} nota={id_nota} salvo!")
             except Exception as e:
                 db.rollback()
-                logger.error(f"❌ Erro no banco: {e}")
+                logger.error(f"❌ Item SKU={sku} nota={id_nota}: {e}")
             finally:
                 db.close()
 

@@ -5,8 +5,8 @@ from datetime import datetime
 class WebhookEvent(Base):
     __tablename__ = "webhook_events"
 
-    id = Column(Integer, primary_key=True, index=True)
-    id_nota = Column(Integer, index=True)
+    id = Column(BigInteger, primary_key=True, index=True)
+    id_nota = Column(BigInteger, index=True)
 
     status = Column(String, default="pending")
     # pending = chegou
@@ -24,15 +24,19 @@ class WebhookEvent(Base):
 
 class VendaItem(Base):
     __tablename__ = "vendas_itens"
-
     id = Column(Integer, primary_key=True, index=True)
     venda_id = Column(BigInteger, index=True)
     id_loja = Column(BigInteger)
     produto_id = Column(String)
     sku = Column(String)
+    linha = Column(Integer, default=0)        # ← novo
     nome_produto = Column(String)
     quantidade = Column(Float)
     valor_unitario = Column(Float)
     valor_total = Column(Float)
     estoque_pos_venda = Column(Float)
     timestamp = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint('venda_id', 'sku', 'linha', name='unique_venda_item'),
+    )
