@@ -30,15 +30,16 @@ async def processar_evento(evento_id):
             if "NOTA_NAO_ENCONTRADA" in erro:
                 evento.tentativas += 1
 
-                if evento.tentativas >= 5:
+                if evento.tentativas >= 10:
                     evento.status = "ignored"
                 else:
                     evento.status = "pending"
 
                 logger.warning(f"⚠️ Nota {evento.id_nota} não encontrada (tentativa {evento.tentativas})")
+                delay = min(5 * (2 ** evento.tentativas - 1), 60)
 
                 db.commit()
-                await asyncio.sleep(5)
+                await asyncio.sleep(delay)
                 return
 
             elif "RATE_LIMIT" in erro:
@@ -71,7 +72,7 @@ async def worker_loop():
                 db.query(WebhookEvent)
                 .filter(
                     (WebhookEvent.status == "pending") |
-                    ((WebhookEvent.status == "error") & (WebhookEvent.tentativas < 5))
+                    ((WebhookEvent.status == "error") & (WebhookEvent.tentativas < 10))
                 )
                 .with_for_update(skip_locked=True)
                 .limit(10)
