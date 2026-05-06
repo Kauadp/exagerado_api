@@ -19,52 +19,73 @@ class AlertaBase:
 class AlertaPerformance(AlertaBase):
     def analisar(self):
         agora = datetime.now()
-        inicio_hora_atual = agora.replace(minute=0, second=0, microsecond=0)
+        
+        # Última hora COMPLETA (ex: se são 12:47, pega 11:00-12:00)
+        hora_atual = agora.replace(minute=0, second=0, microsecond=0)
+        hora_anterior = hora_atual - timedelta(hours=1)
+        ontem_hora_anterior = hora_anterior - timedelta(days=1)
+        ontem_hora_atual = hora_atual - timedelta(days=1)
 
-        # Janela de tempo
-        ontem_mesmo_horario = agora - timedelta(days=1)
-        inicio_hora_ontem = inicio_hora_atual - timedelta(days=1)
-
-        # Vendas Hoje
-        self.venda_hoje_hora = self.df[
-            (self.df["timestamp"] >= inicio_hora_atual) &
-            (self.df["timestamp"] <= agora)
+        # Última hora completa — hoje
+        self.venda_ultima_hora = self.df[
+            (self.df["timestamp"] >= hora_anterior) &
+            (self.df["timestamp"] < hora_atual)
         ]["valor_total"].sum()
 
-        # Vendas ontem
+        self.pecas_ultima_hora = self.df[
+            (self.df["timestamp"] >= hora_anterior) &
+            (self.df["timestamp"] < hora_atual)
+        ]["quantidade"].sum()
+
+        # Mesma hora — ontem
         self.venda_ontem_hora = self.df[
-            (self.df["timestamp"] >= inicio_hora_ontem) &
-            (self.df["timestamp"] <= ontem_mesmo_horario)
+            (self.df["timestamp"] >= ontem_hora_anterior) &
+            (self.df["timestamp"] < ontem_hora_atual)
         ]["valor_total"].sum()
 
-        # Projeção
-        venda_total_ontem = self.df[
-            (self.df['timestamp'].dt.date == (agora - timedelta(days=1)).date())
-        ]['valor_total'].sum()
-        
-        self.venda_total_ontem = venda_total_ontem
-        
+        # Totais do dia (meia-noite até agora)
+        inicio_hoje = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+        inicio_ontem = inicio_hoje - timedelta(days=1)
+        fim_ontem = inicio_hoje
+
+        self.faturamento_total_hoje = self.df[
+            self.df["timestamp"] >= inicio_hoje
+        ]["valor_total"].sum()
+
+        self.pecas_total_hoje = self.df[
+            self.df["timestamp"] >= inicio_hoje
+        ]["quantidade"].sum()
+
+        self.faturamento_total_ontem = self.df[
+            (self.df["timestamp"] >= inicio_ontem) &
+            (self.df["timestamp"] < fim_ontem)
+        ]["valor_total"].sum()
+
+        # Variação da última hora
         if self.venda_ontem_hora > 0:
-            self.variacao_hora = (self.venda_hoje_hora / self.venda_ontem_hora) - 1
-            self.projecao_hoje = venda_total_ontem * (1 + self.variacao_hora)
+            self.variacao_hora = (self.venda_ultima_hora / self.venda_ontem_hora) - 1
         else:
             self.variacao_hora = 0
-            self.projecao_hoje = self.venda_hoje_hora # Simplificação se não houve venda ontem
 
     def gerar_texto(self):
         agora = datetime.now()
+        hora_anterior = agora.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
         dia_semana_ontem = format_date(agora - timedelta(days=1), format='EEEE', locale='pt_BR')
-        hora_str = agora.strftime('%Hh')
+        hora_str = f"{hora_anterior.strftime('%H')}h-{agora.strftime('%H')}h"
 
         emoji = "📈" if self.variacao_hora >= 0 else "📉"
         sinal = "+" if self.variacao_hora >= 0 else ""
 
         return (
-            f"{emoji} *Performance Comparativa*\n\n"
-            f"• {dia_semana_ontem} {hora_str}: R$ {self.venda_ontem_hora:,.2f}\n"
-            f"• Hoje {hora_str}: R$ {self.venda_hoje_hora:,.2f} ({sinal}{self.variacao_hora:.1%})\n\n"
-            f"🎯 *Projeção de Fechamento:*\n"
-            f"R$ {self.projecao_hoje:,.2f} vs R$ {self.venda_total_ontem:,.2f} (ontem)"
+            f"🕐 *{hora_str}*\n\n"
+            f"*Última hora*\n"
+            f"• Hoje: R$ {self.venda_ultima_hora:,.2f} | {int(self.pecas_ultima_hora)} pçs\n"
+            f"• {dia_semana_ontem}: R$ {self.venda_ontem_hora:,.2f}\n"
+            f"{emoji} Variação: {sinal}{self.variacao_hora:.1%}\n\n"
+            f"*Acumulado hoje*\n"
+            f"• Faturamento: R$ {self.faturamento_total_hoje:,.2f}\n"
+            f"• Peças: {int(self.pecas_total_hoje)} pçs\n"
+            f"• Ontem total: R$ {self.faturamento_total_ontem:,.2f}"
         )
     
 class AlertaRanking(AlertaBase):
