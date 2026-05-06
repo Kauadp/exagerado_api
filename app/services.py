@@ -131,8 +131,8 @@ async def processar_venda_completa(id_nota: int):
                     qtd = item.get("quantidade")
                     
                     estoque_restante = None
-                    if sku and sku != "AVULSO":
-                        estoque_restante = await fetch_estoque_atual(sku)
+                    #if sku and sku != "AVULSO":
+                        #estoque_restante = await fetch_estoque_atual(sku)
 
                     dados_venda = {
                         "venda_id": id_nota,
