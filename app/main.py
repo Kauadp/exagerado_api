@@ -86,17 +86,29 @@ async def bling_webhook(request: Request, token: str):
     
     payload = await request.json()
     id_nota = payload.get("data", {}).get("id")
+    situacao = payload.get("data", {}).get("situacao")
+
+    if situacao != 5: 
+        return {"status": "ignored", "message": f"Situacao {situacao}, ignorando"}
 
     if id_nota:
         db = SessionLocal()
         try:
-            evento = WebhookEvent(id_nota=id_nota)
-            db.add(evento)
-            db.commit()
+            existente = db.query(WebhookEvent).filter(
+                WebhookEvent.id_nota == id_nota,
+                WebhookEvent.status.in_(["pending", "processing", "done"])
+            ).first()
+            
+            if not existente:
+                evento = WebhookEvent(id_nota=id_nota)
+                db.add(evento)
+                db.commit()
+                logger.info(f"✅ Nota {id_nota} adicionada à fila")
+            else:
+                logger.info(f"⏭️ Nota {id_nota} já na fila ({existente.status}), ignorando")
         except IntegrityError:
             db.rollback()
             logger.info(f"Nota {id_nota} já está na fila")
-
         finally:
             db.close()
         
