@@ -102,4 +102,4 @@ async def rodar_backfill(data_inicio, data_fim):
     print("✅ Backfill finalizado!")
 
 if __name__ == "__main__":
-    asyncio.run(rodar_backfill("2026-05-05 16:00:00", "2026-05-06 23:59:59"))
+    asyncio.run(rodar_backfill("2026-05-07 08:00:00", "2026-05-07 23:59:59"))
