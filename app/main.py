@@ -86,10 +86,16 @@ async def bling_webhook(request: Request, token: str):
     
     payload = await request.json()
     id_nota = payload.get("data", {}).get("id")
+    event = payload.get("event")
+    if event != "consumer_invoice.updated":
+        return {"status": "ignored"}
     situacao = payload.get("data", {}).get("situacao")
     logger.info(f"🔔 Webhook recebido: id={id_nota} situacao={situacao} payload={payload}")
-    if situacao != 5: 
-        return {"status": "ignored", "message": f"Situacao {situacao}, ignorando"}
+    if situacao != 6:
+        return {
+            "status": "ignored",
+            "message": f"Situacao {situacao}, ignorando"
+        }
 
     if id_nota:
         db = SessionLocal()
