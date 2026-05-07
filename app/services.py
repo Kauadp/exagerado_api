@@ -73,23 +73,21 @@ async def get_new_token():
             return access_token
 
 async def fetch_estoques(skus: list[str]) -> dict:
-    """Busca estoque de múltiplos SKUs em uma única chamada."""
     skus_validos = [s for s in skus if s and s != "S-SKU"]
     if not skus_validos:
         return {}
 
-    params = "&".join([f"codigos[]={sku}" for sku in skus_validos])
-    url = f"https://www.bling.com.br/Api/v3/estoques/saldos?{params}"
-    
+    url = "https://www.bling.com.br/Api/v3/estoques/saldos"
+    params = [("codigos[]", sku) for sku in skus_validos]
+
     tokens = load_tokens()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         for tentativa in range(3):
-            response = await client.get(url, headers=headers)
+            response = await client.get(url, headers=headers, params=params)
             if response.status_code == 200:
                 data = response.json().get("data", [])
-                # retorna dict {codigo: saldo}
                 return {
                     item["produto"]["codigo"]: item["saldoFisicoTotal"]
                     for item in data
