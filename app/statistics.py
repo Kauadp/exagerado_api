@@ -203,7 +203,7 @@ class AlertaBayes(AlertaBase):
     def gerar_texto(self):
         if not self.insights: return None
         
-        msg = "💡 *INSIGHT DE VENDA CASADA (BAYES)*\n\n"
+        msg = "💡 *INSIGHT DE VENDA CASADA*\n\n"
         for i in self.insights[:3]:
             msg += f"• Quem compra *{i['base']}* tem *{i['prob']:.0%}* de chance de levar *{i['sugestao']}*.\n"
         

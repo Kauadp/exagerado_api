@@ -72,8 +72,14 @@ async def get_new_token():
 
             return access_token
 
-async def fetch_estoque_atual(sku: str):
-    url = f"https://www.bling.com.br/Api/v3/estoques/saldos?codigos[]={sku}"
+async def fetch_estoques(skus: list[str]) -> dict:
+    """Busca estoque de múltiplos SKUs em uma única chamada."""
+    skus_validos = [s for s in skus if s and s != "S-SKU"]
+    if not skus_validos:
+        return {}
+
+    params = "&".join([f"codigos[]={sku}" for sku in skus_validos])
+    url = f"https://www.bling.com.br/Api/v3/estoques/saldos?{params}"
     
     tokens = load_tokens()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -81,18 +87,19 @@ async def fetch_estoque_atual(sku: str):
     async with httpx.AsyncClient(timeout=10.0) as client:
         for tentativa in range(3):
             response = await client.get(url, headers=headers)
-
             if response.status_code == 200:
                 data = response.json().get("data", [])
-                return data[0].get("saldoFisicoTotal", 0) if data else 0
-
+                # retorna dict {codigo: saldo}
+                return {
+                    item["produto"]["codigo"]: item["saldoFisicoTotal"]
+                    for item in data
+                }
             if response.status_code == 429:
                 await asyncio.sleep(2 ** tentativa)
                 continue
-
             break
 
-    return None  # melhor que 0, pra saber que falhou
+    return {}
 
 # --- FUNÇÃO PRINCIPAL DE PROCESSAMENTO ---
 
@@ -125,6 +132,9 @@ async def processar_venda_completa(id_nota: int):
         itens = venda.get("itens", [])
         logger.info(f"📦 Nota {id_nota} contém {len(itens)} itens.")
 
+        skus = [item.get("codigo") for item in itens]
+        estoques = await fetch_estoques(skus)
+
         # ← UMA conexão pra nota inteira
         db = SessionLocal()
         try:
@@ -140,7 +150,7 @@ async def processar_venda_completa(id_nota: int):
                     "valor_unitario": item.get("valor"),
                     "quantidade": item.get("quantidade"),
                     "valor_total": item.get("valor") * item.get("quantidade"),
-                    "estoque_pos_venda": None,
+                    "estoque_pos_venda": estoques.get(sku),
                     "timestamp": venda.get("dataEmissao")
                 }
                 stmt = insert(VendaItem).values(dados_venda)
