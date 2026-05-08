@@ -67,6 +67,8 @@ class AlertaPerformance(AlertaBase):
         else:
             self.variacao_hora = 0
 
+        self.vendas_acumuladas_total = self.df["valor_total"].sum()
+    
     def gerar_texto(self):
         agora = datetime.now()
         hora_anterior = agora.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
@@ -78,6 +80,7 @@ class AlertaPerformance(AlertaBase):
 
         return (
             f"🕐 *{hora_str}*\n\n"
+            f"Vendas Totais Acumuladas: R$ {self.vendas_acumuladas_total:,.2f}\n\n"
             f"*Última hora*\n"
             f"• Hoje: R$ {self.venda_ultima_hora:,.2f} | {int(self.pecas_ultima_hora)} pçs\n"
             f"• {dia_semana_ontem}: R$ {self.venda_ontem_hora:,.2f}\n"
